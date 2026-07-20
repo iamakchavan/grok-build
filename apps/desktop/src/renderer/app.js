@@ -31,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnCloseModal = document.getElementById('btn-close-modal');
   const btnAttachFile = document.getElementById('btn-attach-file');
   let currentModalPath = '';
+  let activeAgentBubble = null;
 
   // Tab Switching
   tabFiles.addEventListener('click', () => {
@@ -75,23 +76,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnRefreshFiles.addEventListener('click', loadWorkspaceTree);
 
-    // Listen to agent stdout/stderr & ACP events
+    // Listen to real grok.exe stdout/stderr
     window.grokAPI.onAgentStdout((text) => {
-      logTerminal(`[Stdout] ${text}`);
+      logTerminal(`[grok.exe stdout] ${text.trim()}`);
     });
 
     window.grokAPI.onAgentStderr((text) => {
-      logTerminal(`[Stderr] ${text}`);
+      logTerminal(`[grok.exe stderr] ${text.trim()}`);
     });
 
-    window.grokAPI.onAgentStatus(({ active, sessionId }) => {
-      if (active) {
-        setAgentStatus('ready', `Agent Ready (${sessionId || 'ACP'})`);
-        logTerminal(`[Status] ACP Agent Active: ${sessionId || 'Connected'}`);
-      } else {
-        setAgentStatus('thinking', 'Agent Reconnecting...');
-        logTerminal('[Status] Agent Sidecar Disconnected');
-      }
+    window.grokAPI.onAgentStatus(({ active, code }) => {
+      setAgentStatus('ready', 'Agent Ready');
+      logTerminal(`[Status] Process exited with code ${code}`);
+      activeAgentBubble = null;
     });
 
     window.grokAPI.onAgentAcpEvent((msg) => {
@@ -207,6 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <p>Ready for your next coding task or prompt.</p>
       </div>
     `;
+    activeAgentBubble = null;
   });
 
   btnNewChat.addEventListener('click', () => {
@@ -223,41 +221,55 @@ document.addEventListener('DOMContentLoaded', () => {
     appendUserMessage(text);
     promptInput.value = '';
     promptInput.style.height = 'auto';
+    activeAgentBubble = null;
 
     setAgentStatus('thinking', 'Agent Thinking...');
-    logTerminal(`[Prompt] ${text}`);
+    logTerminal(`[Prompt] Sending to real grok.exe: "${text}"`);
 
     if (window.grokAPI) {
       window.grokAPI.sendPrompt({
         prompt: text,
         model: modelSelect.value,
       }).then(res => {
-        if (res.mode === 'embedded_agent') {
-          if (res.toolResults) {
-            res.toolResults.forEach(t => appendToolCard(t.tool, t.output));
-          }
-          if (res.responseText) {
-            appendAgentMessage(res.responseText);
-          }
-          setAgentStatus('ready', 'Agent Ready');
+        if (res.binary) {
+          logTerminal(`[System Agent] Executing ${res.binary}`);
         }
       });
     }
   }
 
   function handleAcpEvent(msg) {
-    logTerminal(`[ACP Event] ${JSON.stringify(msg)}`);
-    if (msg.params && msg.params.update) {
-      const update = msg.params.update;
-      if (update.type === 'tool_call') {
-        appendToolCard(update.tool || 'acp_tool', update.output || update.input || 'Executing...');
-      } else if (update.type === 'agent_message' || update.text) {
-        appendAgentMessage(update.text || JSON.stringify(update));
-      }
-    } else if (msg.result && msg.result.text) {
-      appendAgentMessage(msg.result.text);
+    if (!msg) return;
+
+    // Handle real x.AI API Error / Usage Limit
+    if (msg.type === 'error' || msg.message) {
+      const errMsg = msg.message || JSON.stringify(msg);
+      appendErrorMessage(errMsg);
+      setAgentStatus('ready', 'Agent Ready');
+      return;
     }
-    setAgentStatus('ready', 'Agent Ready');
+
+    // Handle Tool Execution Event
+    if (msg.type === 'tool_call' || msg.tool) {
+      appendToolCard(msg.tool || 'system_tool', msg.output || msg.input || 'Executing tool...');
+      return;
+    }
+
+    // Handle Agent Message / Stream Text
+    let textChunk = "";
+    if (typeof msg === 'string') {
+      textChunk = msg;
+    } else if (msg.text) {
+      textChunk = msg.text;
+    } else if (msg.delta) {
+      textChunk = msg.delta;
+    } else if (msg.result && msg.result.text) {
+      textChunk = msg.result.text;
+    }
+
+    if (textChunk) {
+      appendToActiveAgentMessage(textChunk);
+    }
   }
 
   function appendUserMessage(text) {
@@ -268,11 +280,28 @@ document.addEventListener('DOMContentLoaded', () => {
     chatStream.scrollTop = chatStream.scrollHeight;
   }
 
-  function appendAgentMessage(text) {
-    const msgDiv = document.createElement('div');
-    msgDiv.className = 'chat-message agent';
-    msgDiv.innerHTML = `<div class="message-body">${escapeHTML(text)}</div>`;
-    chatStream.appendChild(msgDiv);
+  function appendToActiveAgentMessage(text) {
+    if (!activeAgentBubble) {
+      const msgDiv = document.createElement('div');
+      msgDiv.className = 'chat-message agent';
+      msgDiv.innerHTML = `<div class="message-body"></div>`;
+      chatStream.appendChild(msgDiv);
+      activeAgentBubble = msgDiv.querySelector('.message-body');
+    }
+    activeAgentBubble.innerHTML += formatMarkdown(text);
+    chatStream.scrollTop = chatStream.scrollHeight;
+  }
+
+  function appendErrorMessage(errorText) {
+    const card = document.createElement('div');
+    card.className = 'tool-card error';
+    card.innerHTML = `
+      <div class="tool-header" style="color: #ef4444;">
+        ⚠️ <span>Grok Engine Status</span>
+      </div>
+      <div class="tool-output">${escapeHTML(errorText)}</div>
+    `;
+    chatStream.appendChild(card);
     chatStream.scrollTop = chatStream.scrollHeight;
   }
 
@@ -305,5 +334,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function escapeHTML(str) {
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function formatMarkdown(str) {
+    return escapeHTML(str)
+      .replace(/\n/g, '<br>')
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/`(.*?)`/g, '<code>$1</code>');
   }
 });
