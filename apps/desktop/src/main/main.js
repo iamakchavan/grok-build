@@ -1,11 +1,12 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, exec } = require('child_process');
 const fs = require('fs');
 
 let mainWindow = null;
 let currentWorkspace = process.cwd();
 let activeProcess = null;
+let activeSessionId = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -138,21 +139,81 @@ ipcMain.handle('workspace:read-file', (event, filePath) => {
   }
 });
 
-// Real Sandboxed Grok Execution Handler (with Tool Calls & Subagents Support)
-ipcMain.handle('agent:send', async (event, { prompt, model }) => {
+// Real Grok Saved Sessions IPC Handlers
+ipcMain.handle('sessions:list', async () => {
+  const grokBin = findSystemGrokBinary();
+  return new Promise((resolve) => {
+    exec(`"${grokBin}" sessions list`, { cwd: currentWorkspace }, (error, stdout, stderr) => {
+      if (error) {
+        console.error('[Grok Desktop Sessions] Error listing sessions:', error);
+        resolve([]);
+        return;
+      }
+
+      const lines = stdout.split('\n');
+      const sessions = [];
+      let headerPassed = false;
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        if (line.includes('SESSION ID')) {
+          headerPassed = true;
+          continue;
+        }
+        if (!headerPassed) continue;
+
+        const parts = line.trim().split(/\s{2,}/);
+        if (parts.length >= 4) {
+          sessions.push({
+            id: parts[0],
+            created: parts[1],
+            updated: parts[2],
+            status: parts[3],
+            summary: parts[4] || 'Untitled Session'
+          });
+        }
+      }
+
+      resolve(sessions);
+    });
+  });
+});
+
+ipcMain.handle('sessions:export', async (event, sessionId) => {
+  const grokBin = findSystemGrokBinary();
+  activeSessionId = sessionId;
+  return new Promise((resolve) => {
+    exec(`"${grokBin}" export "${sessionId}"`, { cwd: currentWorkspace }, (error, stdout, stderr) => {
+      if (error) {
+        resolve({ success: false, error: error.message });
+      } else {
+        resolve({ success: true, sessionId, transcript: stdout });
+      }
+    });
+  });
+});
+
+ipcMain.handle('sessions:new', () => {
+  activeSessionId = null;
+  return { status: 'cleared' };
+});
+
+// Real Sandboxed Grok Execution Handler (Resuming Session if activeSessionId set)
+ipcMain.handle('agent:send', async (event, { prompt, model, sessionId }) => {
   killActiveProcess();
 
   const grokBin = findSystemGrokBinary();
   const targetModel = (model && model !== 'grok-3.5') ? model : 'grok-4.5';
-  console.log(`[Grok Desktop Sandboxed] Spawning real grok agent in ${currentWorkspace}`);
+  const resumeSession = sessionId || activeSessionId;
 
-  const args = [
-    '-p', prompt,
-    '--output-format', 'json',
-    '--cwd', currentWorkspace,
-    '--always-approve',
-    '-m', targetModel
-  ];
+  console.log(`[Grok Desktop] Executing grok agent (Session: ${resumeSession || 'NEW'}, Workspace: ${currentWorkspace})`);
+
+  const args = [];
+  if (resumeSession) {
+    args.push('-r', resumeSession);
+  }
+
+  args.push('-p', prompt, '--output-format', 'json', '--cwd', currentWorkspace, '--always-approve', '-m', targetModel);
 
   try {
     activeProcess = spawn(grokBin, args, {
@@ -196,7 +257,7 @@ ipcMain.handle('agent:send', async (event, { prompt, model }) => {
       activeProcess = null;
     });
 
-    return { status: 'spawned', binary: grokBin, model: targetModel, workspace: currentWorkspace };
+    return { status: 'spawned', binary: grokBin, model: targetModel, sessionId: resumeSession };
   } catch (err) {
     console.error('[Grok Desktop] Failed to execute grok agent:', err);
     return { status: 'error', error: err.message };

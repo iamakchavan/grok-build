@@ -6,6 +6,11 @@ contextBridge.exposeInMainWorld('grokAPI', {
   readWorkspaceTree: () => ipcRenderer.invoke('workspace:read-tree'),
   readWorkspaceFile: (filePath) => ipcRenderer.invoke('workspace:read-file', filePath),
 
+  // Real Grok Saved Sessions
+  listSessions: () => ipcRenderer.invoke('sessions:list'),
+  exportSession: (sessionId) => ipcRenderer.invoke('sessions:export', sessionId),
+  newSession: () => ipcRenderer.invoke('sessions:new'),
+
   sendPrompt: (data) => ipcRenderer.invoke('agent:send', data),
   cancelTurn: () => ipcRenderer.invoke('agent:cancel'),
 

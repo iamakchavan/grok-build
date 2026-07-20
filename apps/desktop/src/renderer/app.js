@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const viewFiles = document.getElementById('view-files');
   const viewSessions = document.getElementById('view-sessions');
   const fileTreeContainer = document.getElementById('file-tree');
+  const sessionsList = document.getElementById('sessions-list');
   const btnRefreshFiles = document.getElementById('btn-refresh-files');
 
   // Process Logs Drawer
@@ -42,8 +43,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let activeAgentBubble = null;
   let cachedFilePaths = [];
   let popupActiveIndex = 0;
-  let currentAutocompleteMode = null; // 'at' | 'slash' | null
+  let currentAutocompleteMode = null;
   let currentTriggerIndex = -1;
+  let currentActiveSessionId = null;
 
   // Slash commands registry matching TUI
   const slashCommands = [
@@ -69,6 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
     tabFiles.classList.remove('active');
     viewSessions.classList.add('active');
     viewFiles.classList.remove('active');
+    loadSavedSessions();
   });
 
   // Terminal Drawer Toggle
@@ -85,6 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (path) {
         workspacePathEl.textContent = path;
         loadWorkspaceTree();
+        loadSavedSessions();
       }
     });
 
@@ -116,6 +120,50 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.grokAPI.onAgentAcpEvent((msg) => {
       handleAcpEvent(msg);
+    });
+  }
+
+  // Load Real Grok Sessions from System Store
+  async function loadSavedSessions() {
+    if (!window.grokAPI || !sessionsList) return;
+    sessionsList.innerHTML = '<li class="session-item">Loading Grok sessions...</li>';
+
+    const sessions = await window.grokAPI.listSessions();
+    sessionsList.innerHTML = '';
+
+    if (!sessions || sessions.length === 0) {
+      sessionsList.innerHTML = '<li class="session-item">No saved sessions found</li>';
+      return;
+    }
+
+    sessions.forEach(sess => {
+      const li = document.createElement('li');
+      li.className = `session-item ${sess.id === currentActiveSessionId ? 'active' : ''}`;
+      li.innerHTML = `
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <div style="display: flex; flex-direction: column; overflow: hidden;">
+          <span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHTML(sess.summary)}</span>
+          <span style="font-size: 0.68rem; color: var(--text-dim);">${sess.created} • ${sess.id.slice(0, 8)}...</span>
+        </div>
+      `;
+
+      li.addEventListener('click', async () => {
+        currentActiveSessionId = sess.id;
+        document.querySelectorAll('.session-item').forEach(item => item.classList.remove('active'));
+        li.classList.add('active');
+
+        logTerminal(`[Sessions] Exporting transcript for session ${sess.id}...`);
+        const res = await window.grokAPI.exportSession(sess.id);
+        if (res.success) {
+          chatStream.innerHTML = '';
+          appendAgentMessage(`### Resumed Session: **${sess.summary}**\n\`ID: ${sess.id}\``);
+          if (res.transcript) {
+            appendAgentMessage(res.transcript);
+          }
+        }
+      });
+
+      sessionsList.appendChild(li);
     });
   }
 
@@ -387,7 +435,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   btnNewChat.addEventListener('click', () => {
+    currentActiveSessionId = null;
+    if (window.grokAPI) {
+      window.grokAPI.newSession();
+    }
     btnClearChat.click();
+    loadSavedSessions();
   });
 
   function submitPrompt() {
@@ -410,9 +463,11 @@ document.addEventListener('DOMContentLoaded', () => {
       window.grokAPI.sendPrompt({
         prompt: text,
         model: modelSelect.value,
+        sessionId: currentActiveSessionId,
       }).then(res => {
         if (res.binary) {
-          logTerminal(`[Agent Subprocess] Sandboxed binary: ${res.binary} (Workspace: ${res.workspace})`);
+          logTerminal(`[Agent Subprocess] Sandboxed binary: ${res.binary} (Session: ${res.sessionId || 'NEW'})`);
+          setTimeout(loadSavedSessions, 3000);
         }
       });
     }
@@ -472,6 +527,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const msgDiv = document.createElement('div');
     msgDiv.className = 'chat-message user';
     msgDiv.innerHTML = `<div class="message-body">${escapeHTML(text)}</div>`;
+    chatStream.appendChild(msgDiv);
+    chatStream.scrollTop = chatStream.scrollHeight;
+  }
+
+  function appendAgentMessage(text) {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'chat-message agent';
+    msgDiv.innerHTML = `<div class="message-body">${formatMarkdown(text)}</div>`;
     chatStream.appendChild(msgDiv);
     chatStream.scrollTop = chatStream.scrollHeight;
   }
