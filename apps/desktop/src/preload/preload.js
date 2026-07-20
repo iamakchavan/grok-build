@@ -3,6 +3,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('grokAPI', {
   selectWorkspace: () => ipcRenderer.invoke('workspace:select'),
   getCurrentWorkspace: () => ipcRenderer.invoke('workspace:get-current'),
+  readWorkspaceTree: () => ipcRenderer.invoke('workspace:read-tree'),
+  readWorkspaceFile: (filePath) => ipcRenderer.invoke('workspace:read-file', filePath),
   sendPrompt: (data) => ipcRenderer.invoke('agent:send', data),
   cancelTurn: () => ipcRenderer.invoke('agent:cancel'),
   

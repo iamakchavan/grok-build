@@ -140,6 +140,47 @@ ipcMain.handle('workspace:get-current', () => {
   return currentWorkspace;
 });
 
+ipcMain.handle('workspace:read-tree', () => {
+  function scan(dirPath, depth = 0) {
+    if (depth > 3) return [];
+    try {
+      const items = fs.readdirSync(dirPath, { withFileTypes: true });
+      const result = [];
+      for (const item of items) {
+        if (item.name === 'node_modules' || item.name === 'target' || item.name === '.git') continue;
+        const fullPath = path.join(dirPath, item.name);
+        if (item.isDirectory()) {
+          result.push({
+            name: item.name,
+            path: fullPath,
+            isDir: true,
+            children: scan(fullPath, depth + 1)
+          });
+        } else {
+          result.push({
+            name: item.name,
+            path: fullPath,
+            isDir: false
+          });
+        }
+      }
+      return result;
+    } catch (e) {
+      return [];
+    }
+  }
+  return scan(currentWorkspace);
+});
+
+ipcMain.handle('workspace:read-file', (event, filePath) => {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return { success: true, content, path: filePath };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
 ipcMain.handle('agent:send', async (event, { prompt, model }) => {
   if (agentProcess && agentProcess.stdin.writable) {
     const acpMessage = JSON.stringify({

@@ -4,10 +4,17 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn check_protoc_good(protoc: &Path) -> anyhow::Result<()> {
-    let output = Command::new(protoc)
-        .arg("--version")
-        .output()
-        .context("Failed to execute protoc")?;
+    let mut cmd = Command::new(protoc);
+    let output = match cmd.arg("--version").output() {
+        Ok(out) => out,
+        Err(e) if cfg!(windows) => {
+            // On Windows, bin/protoc is a DotSlash wrapper without .exe extension.
+            // Retry with `dotslash <protoc>`.
+            let mut ds_cmd = Command::new("dotslash");
+            ds_cmd.arg(protoc).arg("--version").output().context(format!("Failed to execute protoc directly ({e}) or via dotslash"))?
+        }
+        Err(e) => return Err(anyhow::Error::from(e).context("Failed to execute protoc")),
+    };
 
     if !output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
