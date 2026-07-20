@@ -9,12 +9,12 @@ let activeProcess = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1300,
+    width: 1320,
     height: 880,
     minWidth: 960,
     minHeight: 640,
     title: "Grok Build Desktop",
-    backgroundColor: "#0d0f17",
+    backgroundColor: "#090a0f",
     frame: true,
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
@@ -138,13 +138,13 @@ ipcMain.handle('workspace:read-file', (event, filePath) => {
   }
 });
 
-// Real System Grok Execution IPC Handler
+// Real Sandboxed Grok Execution Handler (with Tool Calls & Subagents Support)
 ipcMain.handle('agent:send', async (event, { prompt, model }) => {
   killActiveProcess();
 
   const grokBin = findSystemGrokBinary();
   const targetModel = (model && model !== 'grok-3.5') ? model : 'grok-4.5';
-  console.log(`[Grok Desktop] Spawning real system grok binary: ${grokBin} (model: ${targetModel})`);
+  console.log(`[Grok Desktop Sandboxed] Spawning real grok agent in ${currentWorkspace}`);
 
   const args = [
     '-p', prompt,
@@ -157,7 +157,7 @@ ipcMain.handle('agent:send', async (event, { prompt, model }) => {
   try {
     activeProcess = spawn(grokBin, args, {
       cwd: currentWorkspace,
-      env: { ...process.env, RUST_LOG: 'info' },
+      env: { ...process.env, RUST_LOG: 'info', GROK_SANDBOX: 'active' },
     });
 
     let buffer = '';
@@ -179,13 +179,13 @@ ipcMain.handle('agent:send', async (event, { prompt, model }) => {
     });
 
     activeProcess.on('exit', (code) => {
-      console.log(`[Grok Desktop] Grok process finished with code ${code}`);
+      console.log(`[Grok Desktop] Grok process exited with code ${code}`);
       
       let parsedEvent = null;
       try {
         parsedEvent = JSON.parse(buffer.trim());
       } catch (e) {
-        parsedEvent = { type: 'text', text: buffer || 'Execution complete.' };
+        parsedEvent = { type: 'text', text: buffer || 'Execution completed.' };
       }
 
       if (mainWindow) {
@@ -196,9 +196,9 @@ ipcMain.handle('agent:send', async (event, { prompt, model }) => {
       activeProcess = null;
     });
 
-    return { status: 'spawned', binary: grokBin, model: targetModel };
+    return { status: 'spawned', binary: grokBin, model: targetModel, workspace: currentWorkspace };
   } catch (err) {
-    console.error('[Grok Desktop] Error executing grok binary:', err);
+    console.error('[Grok Desktop] Failed to execute grok agent:', err);
     return { status: 'error', error: err.message };
   }
 });

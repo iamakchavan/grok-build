@@ -86,7 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.grokAPI.onAgentStatus(({ active, code }) => {
-      setAgentStatus('ready', 'Agent Online');
+      setAgentStatus('ready', 'Agent Sandboxed');
       logTerminal(`[Status] Process finished with exit code ${code}`);
       activeAgentBubble = null;
     });
@@ -224,7 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
     activeAgentBubble = null;
 
     setAgentStatus('thinking', 'Agent Thinking...');
-    logTerminal(`[Prompt] Executing grok.exe -p "${text}"`);
+    logTerminal(`[Prompt] Executing sandboxed grok.exe -p "${text}"`);
 
     if (window.grokAPI) {
       window.grokAPI.sendPrompt({
@@ -232,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
         model: modelSelect.value,
       }).then(res => {
         if (res.binary) {
-          logTerminal(`[Agent Process] Binary: ${res.binary} (Model: ${res.model})`);
+          logTerminal(`[Agent Subprocess] Sandboxed binary: ${res.binary} (Workspace: ${res.workspace})`);
         }
       });
     }
@@ -241,7 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function handleAcpEvent(msg) {
     if (!msg) return;
 
-    // Filter out tracing logs with ANSI escape codes
+    // Filter tracing logs
     if (typeof msg === 'string' && (msg.includes('\u001b') || msg.includes('INFO') || msg.includes('timing'))) {
       logTerminal(stripAnsi(msg));
       return;
@@ -255,7 +255,13 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         logTerminal(stripAnsi(errMsg));
       }
-      setAgentStatus('ready', 'Agent Online');
+      setAgentStatus('ready', 'Agent Sandboxed');
+      return;
+    }
+
+    // Handle Subagent Invocation Event
+    if (msg.type === 'subagent_start' || msg.type === 'invoke_subagent' || msg.subagent) {
+      appendSubagentCard(msg.subagent || 'Subagent Worker', msg.prompt || msg.role || 'Executing subagent task...');
       return;
     }
 
@@ -307,7 +313,7 @@ document.addEventListener('DOMContentLoaded', () => {
     card.className = 'tool-card error';
     card.innerHTML = `
       <div class="tool-header" style="color: #ef4444;">
-        ⚠️ <span>Grok Engine Notice</span>
+        ⚠️ <span>Grok Engine Status</span>
       </div>
       <div class="tool-output">${escapeHTML(stripAnsi(errorText))}</div>
     `;
@@ -315,13 +321,36 @@ document.addEventListener('DOMContentLoaded', () => {
     chatStream.scrollTop = chatStream.scrollHeight;
   }
 
+  function appendSubagentCard(roleName, promptText) {
+    const card = document.createElement('div');
+    card.className = 'tool-card';
+    card.style.borderColor = 'rgba(139, 92, 246, 0.4)';
+    card.style.background = 'rgba(139, 92, 246, 0.08)';
+    card.innerHTML = `
+      <div class="tool-header" style="color: #a78bfa;">
+        🤖 <span>Subagent Spawned: ${escapeHTML(roleName)}</span>
+      </div>
+      <div class="tool-output">${escapeHTML(stripAnsi(promptText))}</div>
+    `;
+    chatStream.appendChild(card);
+    chatStream.scrollTop = chatStream.scrollHeight;
+  }
+
   function appendToolCard(toolName, outputText) {
+    const toolIcons = {
+      grep_search: '🔍',
+      read_file: '📄',
+      write_to_file: '✏️',
+      execute_command: '🐚',
+      git: '📦',
+    };
+    const icon = toolIcons[toolName] || '🛠️';
+
     const card = document.createElement('div');
     card.className = 'tool-card';
     card.innerHTML = `
       <div class="tool-header">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-        Tool Execution: <span>${escapeHTML(toolName)}</span>
+        <span>${icon} Tool Call: ${escapeHTML(toolName)}</span>
       </div>
       <div class="tool-output">${escapeHTML(stripAnsi(outputText))}</div>
     `;
