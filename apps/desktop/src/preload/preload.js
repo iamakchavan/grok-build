@@ -17,4 +17,7 @@ contextBridge.exposeInMainWorld('grokAPI', {
   onAgentStatus: (callback) => {
     ipcRenderer.on('agent:status', (event, status) => callback(status));
   },
+  onAgentAcpEvent: (callback) => {
+    ipcRenderer.on('agent:acp-event', (event, msg) => callback(msg));
+  },
 });

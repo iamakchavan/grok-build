@@ -75,9 +75,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnRefreshFiles.addEventListener('click', loadWorkspaceTree);
 
-    // Listen to agent stdout/stderr
+    // Listen to agent stdout/stderr & ACP events
     window.grokAPI.onAgentStdout((text) => {
-      handleAgentOutput(text);
       logTerminal(`[Stdout] ${text}`);
     });
 
@@ -85,14 +84,18 @@ document.addEventListener('DOMContentLoaded', () => {
       logTerminal(`[Stderr] ${text}`);
     });
 
-    window.grokAPI.onAgentStatus(({ active }) => {
+    window.grokAPI.onAgentStatus(({ active, sessionId }) => {
       if (active) {
-        setAgentStatus('ready', 'Agent Ready');
-        logTerminal('[Status] Agent Sidecar Ready');
+        setAgentStatus('ready', `Agent Ready (${sessionId || 'ACP'})`);
+        logTerminal(`[Status] ACP Agent Active: ${sessionId || 'Connected'}`);
       } else {
         setAgentStatus('thinking', 'Agent Reconnecting...');
-        logTerminal('[Status] Agent Sidecar Reconnecting...');
+        logTerminal('[Status] Agent Sidecar Disconnected');
       }
+    });
+
+    window.grokAPI.onAgentAcpEvent((msg) => {
+      handleAcpEvent(msg);
     });
   }
 
@@ -229,13 +232,32 @@ document.addEventListener('DOMContentLoaded', () => {
         prompt: text,
         model: modelSelect.value,
       }).then(res => {
-        if (res.status === 'bridge_mode') {
-          simulateAgentResponse(text);
+        if (res.mode === 'embedded_agent') {
+          if (res.toolResults) {
+            res.toolResults.forEach(t => appendToolCard(t.tool, t.output));
+          }
+          if (res.responseText) {
+            appendAgentMessage(res.responseText);
+          }
+          setAgentStatus('ready', 'Agent Ready');
         }
       });
-    } else {
-      simulateAgentResponse(text);
     }
+  }
+
+  function handleAcpEvent(msg) {
+    logTerminal(`[ACP Event] ${JSON.stringify(msg)}`);
+    if (msg.params && msg.params.update) {
+      const update = msg.params.update;
+      if (update.type === 'tool_call') {
+        appendToolCard(update.tool || 'acp_tool', update.output || update.input || 'Executing...');
+      } else if (update.type === 'agent_message' || update.text) {
+        appendAgentMessage(update.text || JSON.stringify(update));
+      }
+    } else if (msg.result && msg.result.text) {
+      appendAgentMessage(msg.result.text);
+    }
+    setAgentStatus('ready', 'Agent Ready');
   }
 
   function appendUserMessage(text) {
@@ -266,31 +288,6 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
     chatStream.appendChild(card);
     chatStream.scrollTop = chatStream.scrollHeight;
-  }
-
-  function handleAgentOutput(dataStr) {
-    setAgentStatus('ready', 'Agent Ready');
-    try {
-      const parsed = JSON.parse(dataStr);
-      if (parsed.result && parsed.result.text) {
-        appendAgentMessage(parsed.result.text);
-      } else {
-        appendAgentMessage(dataStr);
-      }
-    } catch (e) {
-      appendAgentMessage(dataStr);
-    }
-  }
-
-  function simulateAgentResponse(userText) {
-    setTimeout(() => {
-      appendToolCard('grep_search', `Query: "unsafe"\nMatched 12 instances across crates/codegen`);
-    }, 600);
-
-    setTimeout(() => {
-      appendAgentMessage(`I've received your request: "${userText}". All core agent modules (workspace, ACP gateway, tools, sandbox, SQLite journal) are online and active in Desktop mode.`);
-      setAgentStatus('ready', 'Agent Ready');
-    }, 1200);
   }
 
   function logTerminal(msg) {
