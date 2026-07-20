@@ -500,13 +500,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Handle Subagent Invocation Event
     if (msg.type === 'subagent_start' || msg.type === 'invoke_subagent' || msg.subagent) {
-      appendSubagentCard(msg.subagent || 'Subagent Worker', msg.prompt || msg.role || 'Executing subagent task...');
+      appendSubagentCard(msg.subagent || 'Subagent Worker', msg.prompt || msg.role || 'Executing subagent task...', 'Running');
       return;
     }
 
     // Handle Tool Execution Event
     if (msg.type === 'tool_call' || msg.tool) {
-      appendToolCard(msg.tool || 'system_tool', msg.output || msg.input || 'Executing tool...');
+      appendToolCard(msg.tool || 'system_tool', msg.output || msg.input || 'Executing tool...', 'Executing');
       return;
     }
 
@@ -587,17 +587,17 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (role === 'tools' || isTool) {
       lines.forEach(l => {
         if (l.startsWith('- Read:')) {
-          appendToolCard('read_file', l.replace('- Read:', '').trim());
+          appendToolCard('read_file', l.replace('- Read:', '').trim(), 'Completed');
         } else if (l.startsWith('- Search:')) {
-          appendToolCard('grep_search', l.replace('- Search:', '').trim());
+          appendToolCard('grep_search', l.replace('- Search:', '').trim(), 'Completed');
         } else if (l.startsWith('- Execute:')) {
-          appendToolCard('execute_command', l.replace('- Execute:', '').trim());
+          appendToolCard('execute_command', l.replace('- Execute:', '').trim(), 'Completed');
         } else if (l.startsWith('- ListDir:')) {
-          appendToolCard('read_tree', l.replace('- ListDir:', '').trim());
+          appendToolCard('read_tree', l.replace('- ListDir:', '').trim(), 'Completed');
         } else if (l.startsWith('- Edit:')) {
           appendDiffCard('Modified Code File', l.replace('- Edit:', '').trim());
         } else {
-          appendToolCard('tool_call', l.replace(/^- /, ''));
+          appendToolCard('tool_call', l.replace(/^- /, ''), 'Completed');
         }
       });
     } else {
@@ -657,15 +657,18 @@ document.addEventListener('DOMContentLoaded', () => {
     chatStream.scrollTop = chatStream.scrollHeight;
   }
 
-  function appendSubagentCard(roleName, promptText) {
+  function appendSubagentCard(roleName, promptText, statusLabel = 'Completed') {
     const card = document.createElement('div');
     card.className = 'subagent-card';
+    const isCompleted = statusLabel === 'Completed';
+    const statusBadge = isCompleted ? `<span class="subagent-status" style="color: var(--accent-green); background: rgba(16, 185, 129, 0.15);">✓ Completed</span>` : `<span class="subagent-status">● Active Task</span>`;
+
     card.innerHTML = `
       <div class="subagent-header">
         <div class="subagent-role">
-          <span>🤖 Subagent Working: <strong>${escapeHTML(roleName)}</strong></span>
+          <span>🤖 Subagent Worker: <strong>${escapeHTML(roleName)}</strong></span>
         </div>
-        <span class="subagent-status">● Active Task</span>
+        ${statusBadge}
       </div>
       <div class="subagent-body">${escapeHTML(stripAnsi(promptText))}</div>
     `;
@@ -698,7 +701,7 @@ document.addEventListener('DOMContentLoaded', () => {
     chatStream.scrollTop = chatStream.scrollHeight;
   }
 
-  function appendToolCard(toolName, outputText) {
+  function appendToolCard(toolName, outputText, statusLabel = 'Completed') {
     const toolIcons = {
       grep_search: '🔍',
       read_file: '📄',
@@ -709,12 +712,17 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     const icon = toolIcons[toolName] || '🛠️';
 
+    const isExecuting = statusLabel === 'Executing' || statusLabel === 'Active';
+    const badgeHtml = isExecuting
+      ? `<span style="font-size: 0.7rem; color: var(--accent-cyan);">● Executing...</span>`
+      : `<span style="font-size: 0.7rem; color: var(--accent-green);">✓ Completed</span>`;
+
     const card = document.createElement('div');
     card.className = 'tool-card';
     card.innerHTML = `
       <div class="tool-header">
         <span>${icon} Tool Execution: ${escapeHTML(toolName)}</span>
-        <span style="font-size: 0.7rem; color: var(--accent-green);">● Active</span>
+        ${badgeHtml}
       </div>
       <div class="tool-output">${escapeHTML(stripAnsi(outputText))}</div>
     `;
@@ -744,7 +752,7 @@ document.addEventListener('DOMContentLoaded', () => {
     card.innerHTML = `
       <div class="diff-header">
         <span>✏️ Code Modification: ${escapeHTML(filePath)}</span>
-        <span style="font-size: 0.72rem; color: #34d399;">Diff View</span>
+        <span style="font-size: 0.72rem; color: #34d399;">✓ Applied</span>
       </div>
       <div class="diff-body">${diffLinesHtml || `<div class="diff-line">${escapeHTML(diffContent)}</div>`}</div>
     `;
