@@ -162,7 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
           chatStream.innerHTML = '';
           appendAgentMessage(`### Resumed Session: **${sess.summary}**\n\`ID: ${sess.id}\``);
           if (res.transcript) {
-            appendAgentMessage(res.transcript);
+            renderParsedTranscript(res.transcript);
           }
         }
       });
@@ -527,6 +527,64 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function renderParsedTranscript(transcriptText) {
+    const lines = transcriptText.split('\n');
+    let currentRole = null;
+    let buffer = [];
+    let isToolSection = false;
+
+    for (let line of lines) {
+      line = line.trim();
+      if (line.startsWith('## User')) {
+        if (buffer.length > 0) flushTranscriptBlock(currentRole, buffer, isToolSection);
+        currentRole = 'user';
+        buffer = [];
+        isToolSection = false;
+      } else if (line.startsWith('## Assistant')) {
+        if (buffer.length > 0) flushTranscriptBlock(currentRole, buffer, isToolSection);
+        currentRole = 'agent';
+        buffer = [];
+        isToolSection = false;
+      } else if (line.startsWith('## Tools')) {
+        if (buffer.length > 0) flushTranscriptBlock(currentRole, buffer, isToolSection);
+        currentRole = 'tools';
+        buffer = [];
+        isToolSection = true;
+      } else {
+        if (line) buffer.push(line);
+      }
+    }
+    if (buffer.length > 0) flushTranscriptBlock(currentRole, buffer, isToolSection);
+  }
+
+  function flushTranscriptBlock(role, lines, isTool) {
+    const text = lines.join('\n');
+    if (!text.trim()) return;
+
+    if (role === 'user') {
+      appendUserMessage(text);
+    } else if (role === 'tools' || isTool) {
+      // Parse individual tool calls into graphical UI cards
+      lines.forEach(l => {
+        if (l.startsWith('- Read:')) {
+          appendToolCard('read_file', l.replace('- Read:', '').trim());
+        } else if (l.startsWith('- Search:')) {
+          appendToolCard('grep_search', l.replace('- Search:', '').trim());
+        } else if (l.startsWith('- Execute:')) {
+          appendToolCard('execute_command', l.replace('- Execute:', '').trim());
+        } else if (l.startsWith('- ListDir:')) {
+          appendToolCard('read_tree', l.replace('- ListDir:', '').trim());
+        } else if (l.startsWith('- Edit:')) {
+          appendDiffCard('Modified Code File', l.replace('- Edit:', '').trim());
+        } else {
+          appendToolCard('tool_call', l.replace(/^- /, ''));
+        }
+      });
+    } else {
+      appendAgentMessage(text);
+    }
+  }
+
   function appendUserMessage(text) {
     const msgDiv = document.createElement('div');
     msgDiv.className = 'chat-message user';
@@ -560,7 +618,7 @@ document.addEventListener('DOMContentLoaded', () => {
     card.className = 'tool-card error';
     card.innerHTML = `
       <div class="tool-header" style="color: #ef4444;">
-        ⚠️ <span>Grok Engine Status</span>
+        ⚠️ <span>Grok Engine Notice</span>
       </div>
       <div class="tool-output">${escapeHTML(stripAnsi(errorText))}</div>
     `;
@@ -587,6 +645,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const toolIcons = {
       grep_search: '🔍',
       read_file: '📄',
+      read_tree: '📁',
       write_to_file: '✏️',
       execute_command: '🐚',
       git: '📦',
@@ -597,10 +656,42 @@ document.addEventListener('DOMContentLoaded', () => {
     card.className = 'tool-card';
     card.innerHTML = `
       <div class="tool-header">
-        <span>${icon} Tool Call: ${escapeHTML(toolName)}</span>
+        <span>${icon} Tool Execution: ${escapeHTML(toolName)}</span>
+        <span style="font-size: 0.7rem; color: var(--accent-green);">● Active</span>
       </div>
       <div class="tool-output">${escapeHTML(stripAnsi(outputText))}</div>
     `;
+    chatStream.appendChild(card);
+    chatStream.scrollTop = chatStream.scrollHeight;
+  }
+
+  function appendDiffCard(filePath, diffContent) {
+    const card = document.createElement('div');
+    card.className = 'diff-card';
+    
+    const lines = diffContent.split('\n');
+    let diffLinesHtml = '';
+
+    lines.forEach(l => {
+      if (l.startsWith('+')) {
+        diffLinesHtml += `<div class="diff-line add">${escapeHTML(l)}</div>`;
+      } else if (l.startsWith('-')) {
+        diffLinesHtml += `<div class="diff-line del">${escapeHTML(l)}</div>`;
+      } else if (l.startsWith('@@')) {
+        diffLinesHtml += `<div class="diff-line info">${escapeHTML(l)}</div>`;
+      } else {
+        diffLinesHtml += `<div class="diff-line">${escapeHTML(l)}</div>`;
+      }
+    });
+
+    card.innerHTML = `
+      <div class="diff-header">
+        <span>✏️ Code Modification: ${escapeHTML(filePath)}</span>
+        <span style="font-size: 0.72rem; color: #34d399;">Diff View</span>
+      </div>
+      <div class="diff-body">${diffLinesHtml || `<div class="diff-line">${escapeHTML(diffContent)}</div>`}</div>
+    `;
+
     chatStream.appendChild(card);
     chatStream.scrollTop = chatStream.scrollHeight;
   }

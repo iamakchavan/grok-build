@@ -416,13 +416,17 @@ body, html {
   background: rgba(16, 185, 129, 0.1);
 }
 
+/* Main Workspace Canvas Stream (Clean Layout, No Cluttered Bubbles) */
 .chat-stream {
   flex: 1;
-  padding: 20px 24px 100px;
+  padding: 20px 28px 120px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .welcome-card {
@@ -473,16 +477,17 @@ body, html {
   border-color: var(--accent-purple);
 }
 
-/* Chat Bubbles & Tool Cards */
+/* User & Assistant Workspace Blocks */
 .chat-message {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-width: 82%;
+  width: 100%;
 }
 
 .chat-message.user {
   align-self: flex-end;
+  max-width: 85%;
 }
 
 .chat-message.user .message-body {
@@ -496,25 +501,33 @@ body, html {
 
 .chat-message.agent {
   align-self: flex-start;
+  width: 100%;
 }
 
 .chat-message.agent .message-body {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 14px 14px 14px 2px;
-  padding: 14px 18px;
-  font-size: 0.92rem;
-  line-height: 1.65;
+  background: transparent;
+  color: var(--text-main);
+  padding: 4px 0;
+  font-size: 0.93rem;
+  line-height: 1.7;
+}
+
+/* Visual Tool Call Cards & Diff Component */
+.tool-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
 }
 
 .tool-card {
-  background: #10121e;
+  background: #111322;
   border: 1px solid #232742;
   border-radius: 8px;
   padding: 10px 14px;
   font-family: var(--font-mono);
   font-size: 0.82rem;
-  margin-top: 4px;
+  width: 100%;
 }
 
 .tool-card.error {
@@ -525,16 +538,67 @@ body, html {
 .tool-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
   color: var(--accent-cyan);
   font-weight: 600;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .tool-output {
   color: #cbd5e1;
   white-space: pre-wrap;
   word-break: break-word;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* Graphical Code Diff Component */
+.diff-card {
+  background: #0b0d18;
+  border: 1px solid #282c47;
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 10px 0;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+
+.diff-header {
+  background: #151829;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #282c47;
+  font-weight: 600;
+  color: #c4b5fd;
+}
+
+.diff-body {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+}
+
+.diff-line {
+  padding: 2px 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.diff-line.add {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.diff-line.del {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.diff-line.info {
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 /* Process Logs Drawer */
@@ -653,7 +717,7 @@ body, html {
   font-family: var(--font-mono);
   color: var(--text-muted);
   cursor: pointer;
-  transition: background 0.1s ease;
+  transition: background 0.15s ease;
 }
 
 .popup-item:hover, .popup-item.active {
