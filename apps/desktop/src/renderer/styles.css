@@ -416,7 +416,7 @@ body, html {
   background: rgba(16, 185, 129, 0.1);
 }
 
-/* Main Workspace Canvas Stream (Clean Layout, No Cluttered Bubbles) */
+/* Main Workspace Canvas Stream */
 .chat-stream {
   flex: 1;
   padding: 20px 28px 120px;
@@ -512,14 +512,100 @@ body, html {
   line-height: 1.7;
 }
 
-/* Visual Tool Call Cards & Diff Component */
-.tool-chip-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 10px 0;
+/* Styled GFM Markdown Elements */
+.md-h1 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 14px 0 8px;
+  color: #ffffff;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 6px;
 }
 
+.md-h2 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 12px 0 6px;
+  color: #c4b5fd;
+}
+
+.md-h3 {
+  font-size: 1.02rem;
+  font-weight: 600;
+  margin: 10px 0 4px;
+  color: #38bdf8;
+}
+
+.md-hr {
+  border: none;
+  height: 1px;
+  background: var(--border-color);
+  margin: 16px 0;
+}
+
+.md-table-wrapper {
+  overflow-x: auto;
+  margin: 12px 0;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+.md-table th {
+  background: #151829;
+  color: #c4b5fd;
+  font-weight: 600;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.md-table td {
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: #e2e8f0;
+}
+
+.md-table tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.md-table tr:hover {
+  background: rgba(139, 92, 246, 0.08);
+}
+
+.md-codeblock {
+  background: #0d0e17;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 0.83rem;
+  overflow-x: auto;
+  color: #a5b4fc;
+  margin: 8px 0;
+}
+
+.md-inline-code {
+  font-family: var(--font-mono);
+  background: rgba(139, 92, 246, 0.15);
+  color: #c4b5fd;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.84rem;
+}
+
+.md-li {
+  margin-left: 18px;
+  margin-bottom: 4px;
+}
+
+/* Visual Tool Call Cards & Diff Component */
 .tool-card {
   background: #111322;
   border: 1px solid #232742;

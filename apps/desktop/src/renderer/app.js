@@ -718,10 +718,121 @@ document.addEventListener('DOMContentLoaded', () => {
     return str.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, '');
   }
 
-  function formatMarkdown(str) {
+  // Full GFM Markdown Parser (Tables, Headings, Codeblocks, Lists)
+  function formatMarkdown(rawText) {
+    if (!rawText) return '';
+    const cleanText = stripAnsi(rawText);
+
+    const lines = cleanText.split('\n');
+    let html = '';
+    let inTable = false;
+    let tableHeaderDone = false;
+    let tableRows = [];
+    let inCodeBlock = false;
+    let codeBlockBuffer = [];
+
+    lines.forEach(line => {
+      // Codeblocks
+      if (line.trim().startsWith('```')) {
+        if (inCodeBlock) {
+          html += `<pre class="md-codeblock"><code>${escapeHTML(codeBlockBuffer.join('\n'))}</code></pre>`;
+          codeBlockBuffer = [];
+          inCodeBlock = false;
+        } else {
+          inCodeBlock = true;
+          codeBlockBuffer = [];
+        }
+        return;
+      }
+
+      if (inCodeBlock) {
+        codeBlockBuffer.push(line);
+        return;
+      }
+
+      // Markdown Tables
+      if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+        if (!inTable) {
+          inTable = true;
+          tableHeaderDone = false;
+          tableRows = [];
+        }
+        
+        // Skip separator line |---|---|
+        if (line.includes('---')) {
+          tableHeaderDone = true;
+          return;
+        }
+
+        const cells = line.split('|').slice(1, -1).map(c => c.trim());
+        tableRows.push({ isHeader: !tableHeaderDone, cells });
+        return;
+      } else if (inTable) {
+        // Close table
+        html += renderHtmlTable(tableRows);
+        inTable = false;
+        tableRows = [];
+      }
+
+      // Headings
+      if (line.startsWith('# ')) {
+        html += `<h1 class="md-h1">${parseInlineStyles(line.slice(2))}</h1>`;
+      } else if (line.startsWith('## ')) {
+        html += `<h2 class="md-h2">${parseInlineStyles(line.slice(3))}</h2>`;
+      } else if (line.startsWith('### ')) {
+        html += `<h3 class="md-h3">${parseInlineStyles(line.slice(4))}</h3>`;
+      } else if (line.trim() === '---' || line.trim() === '***') {
+        html += `<hr class="md-hr">`;
+      } else if (line.trim().startsWith('- ')) {
+        html += `<li class="md-li">${parseInlineStyles(line.trim().slice(2))}</li>`;
+      } else if (line.trim().startsWith('* ')) {
+        html += `<li class="md-li">${parseInlineStyles(line.trim().slice(2))}</li>`;
+      } else if (line.trim() !== '') {
+        html += `<div>${parseInlineStyles(line)}</div>`;
+      } else {
+        html += `<br>`;
+      }
+    });
+
+    if (inTable && tableRows.length > 0) {
+      html += renderHtmlTable(tableRows);
+    }
+
+    if (inCodeBlock && codeBlockBuffer.length > 0) {
+      html += `<pre class="md-codeblock"><code>${escapeHTML(codeBlockBuffer.join('\n'))}</code></pre>`;
+    }
+
+    return html;
+  }
+
+  function renderHtmlTable(rows) {
+    let tHtml = '<div class="md-table-wrapper"><table class="md-table">';
+    let hasThead = false;
+
+    rows.forEach(r => {
+      if (r.isHeader) {
+        if (!hasThead) {
+          tHtml += '<thead><tr>';
+          r.cells.forEach(c => { tHtml += `<th>${parseInlineStyles(c)}</th>`; });
+          tHtml += '</tr></thead><tbody>';
+          hasThead = true;
+        }
+      } else {
+        tHtml += '<tr>';
+        r.cells.forEach(c => { tHtml += `<td>${parseInlineStyles(c)}</td>`; });
+        tHtml += '</tr>';
+      }
+    });
+
+    if (hasThead) tHtml += '</tbody>';
+    tHtml += '</table></div>';
+    return tHtml;
+  }
+
+  function parseInlineStyles(str) {
     return escapeHTML(str)
-      .replace(/\n/g, '<br>')
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/`(.*?)`/g, '<code>$1</code>');
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      .replace(/`(.*?)`/g, '<code class="md-inline-code">$1</code>');
   }
 });
