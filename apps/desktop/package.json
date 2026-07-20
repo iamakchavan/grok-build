@@ -1,0 +1,28 @@
+{
+  "name": "grok-build-desktop",
+  "version": "1.0.0",
+  "description": "Desktop GUI application for SpaceXAI Grok Build agent",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:agent": "cargo build -p xai-grok-pager-bin --release",
+    "start:full": "npm run build:agent && electron .",
+    "build": "npm run build:agent && electron-builder",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "keywords": [
+    "grok",
+    "ai",
+    "coding-agent",
+    "electron",
+    "desktop"
+  ],
+  "author": "SpaceXAI",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "^31.2.0"
+  }
+}

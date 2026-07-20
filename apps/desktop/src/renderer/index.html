@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grok Build Desktop</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="app" class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <div class="brand-logo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="#8A5CF6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M2 17L12 22L22 17" stroke="#8A5CF6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M2 12L12 17L22 12" stroke="#8A5CF6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <span class="brand-title">Grok Build</span>
+          <span class="brand-badge">Desktop</span>
+        </div>
+        <button id="btn-new-chat" class="btn-new-chat" title="New Session">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          New Chat
+        </button>
+      </div>
+
+      <!-- Workspace Picker -->
+      <div class="workspace-section">
+        <label class="section-label">Active Workspace</label>
+        <div id="workspace-card" class="workspace-card">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          <span id="workspace-path" class="workspace-path">Loading...</span>
+          <button id="btn-change-workspace" class="btn-icon" title="Change Folder">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Model Selector -->
+      <div class="model-section">
+        <label class="section-label">Agent Model</label>
+        <select id="model-select" class="model-select">
+          <option value="grok-3.5">Grok 3.5 (Default)</option>
+          <option value="grok-3.5-flash">Grok 3.5 Flash (Fast)</option>
+          <option value="grok-3.5-pro">Grok 3.5 Pro (Deep Reasoning)</option>
+        </select>
+      </div>
+
+      <!-- Recent Sessions -->
+      <div class="sessions-section">
+        <label class="section-label">Recent Sessions</label>
+        <ul id="sessions-list" class="sessions-list">
+          <li class="session-item active">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span>Codebase Architecture Audit</span>
+          </li>
+          <li class="session-item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span>Refactor PTY Subsystem</span>
+          </li>
+          <li class="session-item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span>Fix SQLite Journal Lock</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Footer Info -->
+      <div class="sidebar-footer">
+        <div class="status-indicator">
+          <span id="agent-status-dot" class="status-dot ready"></span>
+          <span id="agent-status-text" class="status-text">Agent Ready</span>
+        </div>
+        <div class="version-tag">v1.92.0 (ACP)</div>
+      </div>
+    </aside>
+
+    <!-- Main Workspace View -->
+    <main class="main-content">
+      <!-- Top Navbar -->
+      <header class="top-nav">
+        <div class="nav-title">
+          <h2 id="current-session-title">Grok Build Agent Workspace</h2>
+          <span id="active-mode-badge" class="mode-badge">ACP Mode</span>
+        </div>
+        <div class="nav-actions">
+          <button id="btn-toggle-sandbox" class="btn-secondary active" title="Sandbox Status">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Sandbox Active
+          </button>
+          <button id="btn-clear-chat" class="btn-secondary" title="Clear View">Clear</button>
+        </div>
+      </header>
+
+      <!-- Chat Stream Container -->
+      <section id="chat-stream" class="chat-stream">
+        <!-- Welcome Banner -->
+        <div class="welcome-card">
+          <div class="welcome-icon">⚡</div>
+          <h3>Welcome to Grok Build Desktop</h3>
+          <p>SpaceXAI's terminal AI coding agent running inside an Electron Desktop application.</p>
+          <div class="quick-prompts">
+            <button class="quick-prompt-btn" data-prompt="Audit the codebase for potential bugs and performance issues">
+              🔍 Audit codebase
+            </button>
+            <button class="quick-prompt-btn" data-prompt="Explain the architecture of crates/codegen/xai-grok-agent">
+              🏗️ Explain architecture
+            </button>
+            <button class="quick-prompt-btn" data-prompt="Run cargo check across workspace">
+              🔨 Run build validation
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Bottom Prompt Input Bar -->
+      <footer class="prompt-bar-container">
+        <div class="prompt-bar">
+          <textarea id="prompt-input" class="prompt-input" rows="1" placeholder="Ask Grok to edit files, execute commands, or audit code... (Press Enter to send, Shift+Enter for newline)"></textarea>
+          <div class="prompt-actions">
+            <div class="prompt-hints">
+              <span class="hint-tag">@files</span>
+              <span class="hint-tag">/commands</span>
+            </div>
+            <button id="btn-send-prompt" class="btn-send" title="Send Prompt">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+            </button>
+          </div>
+        </div>
+      </footer>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
