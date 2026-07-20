@@ -1,16 +1,16 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
+const { spawn } = require('child_process');
 const fs = require('fs');
-const pty = require('node-pty');
 
 let mainWindow = null;
 let currentWorkspace = process.cwd();
-let ptyProcess = null;
+let activeProcess = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1350,
-    height: 900,
+    width: 1300,
+    height: 880,
     minWidth: 960,
     minHeight: 640,
     title: "Grok Build Desktop",
@@ -28,7 +28,7 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
-    killPtyProcess();
+    killActiveProcess();
   });
 }
 
@@ -52,66 +52,14 @@ function findSystemGrokBinary() {
   return 'grok';
 }
 
-function spawnPtyProcess(cols = 120, rows = 35) {
-  killPtyProcess();
-
-  const grokBin = findSystemGrokBinary();
-  console.log(`[Grok Desktop PTY] Spawing real Grok TUI at: ${grokBin} (cwd: ${currentWorkspace})`);
-
-  const shell = process.platform === 'win32' ? 'powershell.exe' : 'bash';
-  const repoRoot = path.join(__dirname, '../../../');
-
-  try {
-    // If system grok binary exists, launch it directly in PTY
-    if (fs.existsSync(grokBin)) {
-      ptyProcess = pty.spawn(grokBin, [], {
-        name: 'xterm-256color',
-        cols: cols,
-        rows: rows,
-        cwd: currentWorkspace,
-        env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' }
-      });
-    } else {
-      // Fall back to cargo run
-      ptyProcess = pty.spawn('cargo', ['run', '-p', 'xai-grok-pager-bin'], {
-        name: 'xterm-256color',
-        cols: cols,
-        rows: rows,
-        cwd: repoRoot,
-        env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' }
-      });
-    }
-
-    ptyProcess.onData((data) => {
-      if (mainWindow) {
-        mainWindow.webContents.send('pty:data', data);
-      }
-    });
-
-    ptyProcess.onExit(({ exitCode }) => {
-      console.log(`[Grok Desktop PTY] Process exited with code ${exitCode}`);
-      ptyProcess = null;
-      if (mainWindow) {
-        mainWindow.webContents.send('pty:exit', exitCode);
-      }
-    });
-
-    if (mainWindow) {
-      mainWindow.webContents.send('pty:ready', { binary: grokBin, workspace: currentWorkspace });
-    }
-  } catch (err) {
-    console.error('[Grok Desktop PTY] Failed to spawn PTY:', err);
-  }
-}
-
-function killPtyProcess() {
-  if (ptyProcess) {
+function killActiveProcess() {
+  if (activeProcess) {
     try {
-      ptyProcess.kill();
+      activeProcess.kill();
     } catch (e) {
       // ignore
     }
-    ptyProcess = null;
+    activeProcess = null;
   }
 }
 
@@ -132,27 +80,6 @@ app.on('window-all-closed', () => {
 });
 
 // IPC Handlers
-ipcMain.handle('pty:init', (event, { cols, rows }) => {
-  spawnPtyProcess(cols, rows);
-  return { status: 'spawned' };
-});
-
-ipcMain.handle('pty:write', (event, data) => {
-  if (ptyProcess) {
-    ptyProcess.write(data);
-  }
-});
-
-ipcMain.handle('pty:resize', (event, { cols, rows }) => {
-  if (ptyProcess) {
-    try {
-      ptyProcess.resize(cols, rows);
-    } catch (e) {
-      // ignore
-    }
-  }
-});
-
 ipcMain.handle('workspace:select', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory'],
@@ -161,7 +88,6 @@ ipcMain.handle('workspace:select', async () => {
 
   if (!result.canceled && result.filePaths.length > 0) {
     currentWorkspace = result.filePaths[0];
-    spawnPtyProcess();
     return currentWorkspace;
   }
   return null;
@@ -212,13 +138,75 @@ ipcMain.handle('workspace:read-file', (event, filePath) => {
   }
 });
 
-ipcMain.handle('agent:send-command', (event, commandStr) => {
-  if (ptyProcess) {
-    ptyProcess.write(commandStr + '\r');
-  } else {
-    spawnPtyProcess();
-    setTimeout(() => {
-      if (ptyProcess) ptyProcess.write(commandStr + '\r');
-    }, 1000);
+// Real System Grok Execution IPC Handler
+ipcMain.handle('agent:send', async (event, { prompt, model }) => {
+  killActiveProcess();
+
+  const grokBin = findSystemGrokBinary();
+  const targetModel = (model && model !== 'grok-3.5') ? model : 'grok-4.5';
+  console.log(`[Grok Desktop] Spawning real system grok binary: ${grokBin} (model: ${targetModel})`);
+
+  const args = [
+    '-p', prompt,
+    '--output-format', 'json',
+    '--cwd', currentWorkspace,
+    '--always-approve',
+    '-m', targetModel
+  ];
+
+  try {
+    activeProcess = spawn(grokBin, args, {
+      cwd: currentWorkspace,
+      env: { ...process.env, RUST_LOG: 'info' },
+    });
+
+    let buffer = '';
+
+    activeProcess.stdout.on('data', (data) => {
+      const text = data.toString();
+      buffer += text;
+
+      if (mainWindow) {
+        mainWindow.webContents.send('agent:stdout', text);
+      }
+    });
+
+    activeProcess.stderr.on('data', (data) => {
+      const text = data.toString();
+      if (mainWindow) {
+        mainWindow.webContents.send('agent:stderr', text);
+      }
+    });
+
+    activeProcess.on('exit', (code) => {
+      console.log(`[Grok Desktop] Grok process finished with code ${code}`);
+      
+      let parsedEvent = null;
+      try {
+        parsedEvent = JSON.parse(buffer.trim());
+      } catch (e) {
+        parsedEvent = { type: 'text', text: buffer || 'Execution complete.' };
+      }
+
+      if (mainWindow) {
+        mainWindow.webContents.send('agent:acp-event', parsedEvent);
+        mainWindow.webContents.send('agent:status', { active: false, code });
+      }
+
+      activeProcess = null;
+    });
+
+    return { status: 'spawned', binary: grokBin, model: targetModel };
+  } catch (err) {
+    console.error('[Grok Desktop] Error executing grok binary:', err);
+    return { status: 'error', error: err.message };
   }
+});
+
+ipcMain.handle('agent:cancel', async () => {
+  killActiveProcess();
+  if (mainWindow) {
+    mainWindow.webContents.send('agent:status', { active: false, code: 0 });
+  }
+  return { status: 'cancelled' };
 });
