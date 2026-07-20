@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusDot = document.getElementById('agent-status-dot');
   const statusText = document.getElementById('agent-status-text');
 
-  // Sidebar Tabs (Files vs Sessions)
+  // Sidebar Tabs
   const tabFiles = document.getElementById('tab-files');
   const tabSessions = document.getElementById('tab-sessions');
   const viewFiles = document.getElementById('view-files');
@@ -30,8 +30,31 @@ document.addEventListener('DOMContentLoaded', () => {
   const modalFileBody = document.getElementById('modal-file-body');
   const btnCloseModal = document.getElementById('btn-close-modal');
   const btnAttachFile = document.getElementById('btn-attach-file');
+
+  // Autocomplete Popup Elements
+  const autocompletePopup = document.getElementById('autocomplete-popup');
+  const popupTitle = document.getElementById('popup-title');
+  const popupList = document.getElementById('popup-list');
+  const hintAt = document.getElementById('hint-at');
+  const hintSlash = document.getElementById('hint-slash');
+
   let currentModalPath = '';
   let activeAgentBubble = null;
+  let cachedFilePaths = [];
+  let popupActiveIndex = 0;
+  let currentAutocompleteMode = null; // 'at' | 'slash' | null
+  let currentTriggerIndex = -1;
+
+  // Slash commands registry matching TUI
+  const slashCommands = [
+    { cmd: '/goal', desc: 'Run autonomous agent goal loop' },
+    { cmd: '/plan', desc: 'Generate step-by-step task execution plan' },
+    { cmd: '/schedule', desc: 'Set one-shot timer or recurring cron schedule' },
+    { cmd: '/grill-me', desc: 'Interactive interview to resolve design decisions' },
+    { cmd: '/teamwork-preview', desc: 'Launch multi-agent teamwork preview' },
+    { cmd: '/learn', desc: 'Persist workflow behavior & instructions' },
+    { cmd: '/clear', desc: 'Clear chat session stream' }
+  ];
 
   // Tab Switching
   tabFiles.addEventListener('click', () => {
@@ -100,7 +123,19 @@ document.addEventListener('DOMContentLoaded', () => {
     fileTreeContainer.innerHTML = '<li class="file-tree-loading">Scanning files...</li>';
     if (!window.grokAPI) return;
     const tree = await window.grokAPI.readWorkspaceTree();
+    cachedFilePaths = [];
+    flattenPaths(tree, cachedFilePaths);
     renderTree(tree, fileTreeContainer);
+  }
+
+  function flattenPaths(nodes, acc) {
+    if (!nodes) return;
+    nodes.forEach(node => {
+      acc.push({ name: node.name, path: node.path, isDir: node.isDir });
+      if (node.children) {
+        flattenPaths(node.children, acc);
+      }
+    });
   }
 
   function renderTree(nodes, parentEl) {
@@ -171,6 +206,164 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Autocomplete Engine (@ and / triggers)
+  hintAt.addEventListener('click', () => {
+    promptInput.value += ' @';
+    promptInput.focus();
+    checkAutocomplete();
+  });
+
+  hintSlash.addEventListener('click', () => {
+    promptInput.value = '/';
+    promptInput.focus();
+    checkAutocomplete();
+  });
+
+  promptInput.addEventListener('input', () => {
+    promptInput.style.height = 'auto';
+    promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
+    checkAutocomplete();
+  });
+
+  function checkAutocomplete() {
+    const val = promptInput.value;
+    const caret = promptInput.selectionStart;
+    const textBeforeCaret = val.slice(0, caret);
+
+    const lastSlashIndex = textBeforeCaret.lastIndexOf('/');
+    const lastAtIndex = textBeforeCaret.lastIndexOf('@');
+
+    if (lastSlashIndex !== -1 && (lastSlashIndex === 0 || textBeforeCaret[lastSlashIndex - 1] === ' ' || textBeforeCaret[lastSlashIndex - 1] === '\n')) {
+      const query = textBeforeCaret.slice(lastSlashIndex + 1).toLowerCase();
+      showSlashAutocomplete(query, lastSlashIndex);
+    } else if (lastAtIndex !== -1 && (lastAtIndex === 0 || textBeforeCaret[lastAtIndex - 1] === ' ' || textBeforeCaret[lastAtIndex - 1] === '\n')) {
+      const query = textBeforeCaret.slice(lastAtIndex + 1).toLowerCase();
+      showAtAutocomplete(query, lastAtIndex);
+    } else {
+      hideAutocomplete();
+    }
+  }
+
+  function showSlashAutocomplete(query, triggerIdx) {
+    currentAutocompleteMode = 'slash';
+    currentTriggerIndex = triggerIdx;
+    popupTitle.textContent = 'Slash Commands';
+
+    const matches = slashCommands.filter(item => item.cmd.toLowerCase().includes(query) || item.desc.toLowerCase().includes(query));
+
+    if (matches.length === 0) {
+      hideAutocomplete();
+      return;
+    }
+
+    popupActiveIndex = 0;
+    renderPopupItems(matches.map(m => ({
+      icon: '⚡',
+      label: m.cmd,
+      desc: m.desc,
+      value: m.cmd + ' '
+    })));
+  }
+
+  function showAtAutocomplete(query, triggerIdx) {
+    currentAutocompleteMode = 'at';
+    currentTriggerIndex = triggerIdx;
+    popupTitle.textContent = 'Workspace Files & Folders (@)';
+
+    const matches = cachedFilePaths.filter(item => item.name.toLowerCase().includes(query) || item.path.toLowerCase().includes(query));
+
+    if (matches.length === 0) {
+      hideAutocomplete();
+      return;
+    }
+
+    popupActiveIndex = 0;
+    renderPopupItems(matches.slice(0, 10).map(m => ({
+      icon: m.isDir ? '📁' : '📄',
+      label: m.name,
+      desc: m.path,
+      value: `@[${m.path}] `
+    })));
+  }
+
+  function renderPopupItems(items) {
+    popupList.innerHTML = '';
+    items.forEach((item, index) => {
+      const li = document.createElement('li');
+      li.className = `popup-item ${index === popupActiveIndex ? 'active' : ''}`;
+      li.innerHTML = `
+        <span class="item-icon">${item.icon}</span>
+        <span class="item-label">${escapeHTML(item.label)}</span>
+        <span class="item-desc">${escapeHTML(item.desc)}</span>
+      `;
+      li.addEventListener('click', () => {
+        applyAutocompleteChoice(item.value);
+      });
+      popupList.appendChild(li);
+    });
+    autocompletePopup.classList.remove('hidden');
+  }
+
+  function applyAutocompleteChoice(choiceValue) {
+    const val = promptInput.value;
+    const before = val.slice(0, currentTriggerIndex);
+    const after = val.slice(promptInput.selectionStart);
+    promptInput.value = before + choiceValue + after;
+    hideAutocomplete();
+    promptInput.focus();
+  }
+
+  function hideAutocomplete() {
+    autocompletePopup.classList.add('hidden');
+    currentAutocompleteMode = null;
+    currentTriggerIndex = -1;
+  }
+
+  // Keyboard Navigation for Autocomplete & Enter to send
+  promptInput.addEventListener('keydown', (e) => {
+    if (!autocompletePopup.classList.contains('hidden')) {
+      const items = popupList.querySelectorAll('.popup-item');
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        popupActiveIndex = (popupActiveIndex + 1) % items.length;
+        updatePopupHighlight(items);
+        return;
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        popupActiveIndex = (popupActiveIndex - 1 + items.length) % items.length;
+        updatePopupHighlight(items);
+        return;
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const activeEl = items[popupActiveIndex];
+        if (activeEl) {
+          activeEl.click();
+        }
+        return;
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        hideAutocomplete();
+        return;
+      }
+    }
+
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      submitPrompt();
+    }
+  });
+
+  function updatePopupHighlight(items) {
+    items.forEach((item, idx) => {
+      if (idx === popupActiveIndex) {
+        item.classList.add('active');
+        item.scrollIntoView({ block: 'nearest' });
+      } else {
+        item.classList.remove('active');
+      }
+    });
+  }
+
   // Quick prompt buttons
   document.querySelectorAll('.quick-prompt-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -178,20 +371,6 @@ document.addEventListener('DOMContentLoaded', () => {
       promptInput.value = prompt;
       submitPrompt();
     });
-  });
-
-  // Auto-grow input
-  promptInput.addEventListener('input', () => {
-    promptInput.style.height = 'auto';
-    promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
-  });
-
-  // Enter to send
-  promptInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      submitPrompt();
-    }
   });
 
   btnSendPrompt.addEventListener('click', submitPrompt);
@@ -212,6 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   function submitPrompt() {
+    hideAutocomplete();
     const text = promptInput.value.trim();
     if (!text) return;
 

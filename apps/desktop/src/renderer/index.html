@@ -124,7 +124,7 @@
         <div class="welcome-card">
           <div class="welcome-icon">⚡</div>
           <h3>Grok Build Desktop</h3>
-          <p>Full sandboxed codebase access, tool execution cards, and subagent orchestration in a modern GUI.</p>
+          <p>Type <code>@</code> for file autocomplete or <code>/</code> for slash commands.</p>
           <div class="quick-prompts">
             <button class="quick-prompt-btn" data-prompt="Audit the codebase for potential bugs and performance issues">
               🔍 Audit codebase
@@ -150,14 +150,23 @@
         </div>
       </div>
 
-      <!-- Bottom Prompt Input Bar -->
+      <!-- Bottom Prompt Input Bar with Autocomplete Popup -->
       <footer class="prompt-bar-container">
+        <!-- Autocomplete Popup Menu -->
+        <div id="autocomplete-popup" class="autocomplete-popup hidden">
+          <div class="popup-header">
+            <span id="popup-title">Autocomplete</span>
+            <span class="popup-hint">↑↓ navigate • Enter select</span>
+          </div>
+          <ul id="popup-list" class="popup-list"></ul>
+        </div>
+
         <div class="prompt-bar">
-          <textarea id="prompt-input" class="prompt-input" rows="1" placeholder="Ask Grok to edit files, execute commands, or audit code... (Press Enter to send)"></textarea>
+          <textarea id="prompt-input" class="prompt-input" rows="1" placeholder="Type @ for files, / for commands, or ask Grok to edit code..."></textarea>
           <div class="prompt-actions">
             <div class="prompt-hints">
-              <span class="hint-tag">@files</span>
-              <span class="hint-tag">/commands</span>
+              <span id="hint-at" class="hint-tag active">@files</span>
+              <span id="hint-slash" class="hint-tag active">/commands</span>
             </div>
             <button id="btn-send-prompt" class="btn-send" title="Send Prompt">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>

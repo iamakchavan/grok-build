@@ -537,7 +537,7 @@ body, html {
   word-break: break-word;
 }
 
-/* Process Logs Drawer (Bottom Overlay) */
+/* Process Logs Drawer */
 .terminal-drawer {
   position: absolute;
   bottom: 80px;
@@ -595,6 +595,88 @@ body, html {
   pointer-events: none;
 }
 
+/* Floating Autocomplete Popup */
+.autocomplete-popup {
+  pointer-events: auto;
+  position: absolute;
+  bottom: calc(100% - 10px);
+  left: 24px;
+  right: 24px;
+  max-height: 240px;
+  background: rgba(18, 20, 32, 0.96);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--accent-purple);
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.6), 0 0 16px var(--accent-purple-glow);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 100;
+}
+
+.autocomplete-popup.hidden {
+  display: none;
+}
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: rgba(139, 92, 246, 0.12);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #c4b5fd;
+}
+
+.popup-hint {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+}
+
+.popup-list {
+  list-style: none;
+  overflow-y: auto;
+  max-height: 190px;
+  display: flex;
+  flex-direction: column;
+}
+
+.popup-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.popup-item:hover, .popup-item.active {
+  background: rgba(139, 92, 246, 0.2);
+  color: #ffffff;
+}
+
+.popup-item .item-icon {
+  font-size: 0.9rem;
+}
+
+.popup-item .item-label {
+  font-weight: 600;
+  color: #a78bfa;
+}
+
+.popup-item .item-desc {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-left: auto;
+  font-family: var(--font-sans);
+}
+
 .prompt-bar {
   pointer-events: auto;
   background: rgba(21, 24, 36, 0.9);
@@ -643,6 +725,13 @@ body, html {
   color: var(--text-dim);
   padding: 2px 6px;
   border-radius: 4px;
+  cursor: pointer;
+}
+
+.hint-tag.active {
+  background: rgba(139, 92, 246, 0.2);
+  color: #a78bfa;
+  border: 1px solid rgba(139, 92, 246, 0.3);
 }
 
 .btn-send {
