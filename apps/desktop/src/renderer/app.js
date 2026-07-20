@@ -86,7 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.grokAPI.onAgentStatus(({ active, code }) => {
-      setAgentStatus('ready', 'Agent Ready');
+      setAgentStatus('ready', 'Agent Online');
       logTerminal(`[Status] Process finished with exit code ${code}`);
       activeAgentBubble = null;
     });
@@ -183,7 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Auto-grow input
   promptInput.addEventListener('input', () => {
     promptInput.style.height = 'auto';
-    promptInput.style.height = Math.min(promptInput.scrollHeight, 150) + 'px';
+    promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
   });
 
   // Enter to send
@@ -232,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
         model: modelSelect.value,
       }).then(res => {
         if (res.binary) {
-          logTerminal(`[Agent Subprocess] Binary: ${res.binary} (Model: ${res.model})`);
+          logTerminal(`[Agent Process] Binary: ${res.binary} (Model: ${res.model})`);
         }
       });
     }
@@ -243,7 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Filter out tracing logs with ANSI escape codes
     if (typeof msg === 'string' && (msg.includes('\u001b') || msg.includes('INFO') || msg.includes('timing'))) {
-      logTerminal(`[Log] ${stripAnsi(msg)}`);
+      logTerminal(stripAnsi(msg));
       return;
     }
 
@@ -255,7 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         logTerminal(stripAnsi(errMsg));
       }
-      setAgentStatus('ready', 'Agent Ready');
+      setAgentStatus('ready', 'Agent Online');
       return;
     }
 
@@ -307,7 +307,7 @@ document.addEventListener('DOMContentLoaded', () => {
     card.className = 'tool-card error';
     card.innerHTML = `
       <div class="tool-header" style="color: #ef4444;">
-        ⚠️ <span>Grok Engine Status</span>
+        ⚠️ <span>Grok Engine Notice</span>
       </div>
       <div class="tool-output">${escapeHTML(stripAnsi(errorText))}</div>
     `;
