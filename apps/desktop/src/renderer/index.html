@@ -68,14 +68,16 @@
         </div>
       </div>
 
-      <!-- Recent Sessions View -->
+      <!-- Recent Sessions View (Synced with Installed TUI) -->
       <div id="view-sessions" class="sidebar-tab-content">
-        <span class="section-label">Recent Sessions</span>
+        <div class="explorer-header">
+          <span class="section-label">TUI & Desktop Sessions</span>
+          <button id="btn-refresh-sessions" class="btn-icon" title="Refresh TUI Sessions">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          </button>
+        </div>
         <ul id="sessions-list" class="sessions-list">
-          <li class="session-item active">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            <span>Codebase Architecture Audit</span>
-          </li>
+          <li class="session-item">Loading Grok TUI sessions...</li>
         </ul>
       </div>
 

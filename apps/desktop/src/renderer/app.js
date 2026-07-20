@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const fileTreeContainer = document.getElementById('file-tree');
   const sessionsList = document.getElementById('sessions-list');
   const btnRefreshFiles = document.getElementById('btn-refresh-files');
+  const btnRefreshSessions = document.getElementById('btn-refresh-sessions');
 
   // Process Logs Drawer
   const btnToggleTerminal = document.getElementById('btn-toggle-terminal');
@@ -102,6 +103,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     btnRefreshFiles.addEventListener('click', loadWorkspaceTree);
+    if (btnRefreshSessions) {
+      btnRefreshSessions.addEventListener('click', loadSavedSessions);
+    }
 
     // Listen to real grok.exe stdout/stderr
     window.grokAPI.onAgentStdout((text) => {
