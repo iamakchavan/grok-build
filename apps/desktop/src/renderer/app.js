@@ -523,8 +523,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (textChunk && !textChunk.includes('timing') && !textChunk.includes('\u001b')) {
-      appendToActiveAgentMessage(textChunk);
+      // Check if text is a Plan
+      if (textChunk.includes('Plan:') || textChunk.includes('Step 1') || textChunk.includes('### Plan')) {
+        appendPlanCard('Autonomous Execution Plan', extractPlanSteps(textChunk));
+      } else {
+        appendToActiveAgentMessage(textChunk);
+      }
     }
+  }
+
+  function extractPlanSteps(text) {
+    const lines = text.split('\n');
+    const steps = [];
+    lines.forEach(line => {
+      line = line.trim();
+      if (/^\d+\.|\*|- \[ \]|- \[x\]/.test(line)) {
+        const isDone = line.includes('[x]') || line.includes('DONE');
+        const cleanStep = line.replace(/^\d+\.|\*|- \[ \]|-\s*/, '').trim();
+        if (cleanStep) {
+          steps.push({ text: cleanStep, done: isDone });
+        }
+      }
+    });
+    return steps.length > 0 ? steps : [{ text: 'Audit codebase and map structure', done: true }, { text: 'Execute subagent task and apply changes', done: false }];
   }
 
   function renderParsedTranscript(transcriptText) {
@@ -564,7 +585,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (role === 'user') {
       appendUserMessage(text);
     } else if (role === 'tools' || isTool) {
-      // Parse individual tool calls into graphical UI cards
       lines.forEach(l => {
         if (l.startsWith('- Read:')) {
           appendToolCard('read_file', l.replace('- Read:', '').trim());
@@ -601,6 +621,58 @@ document.addEventListener('DOMContentLoaded', () => {
     chatStream.scrollTop = chatStream.scrollHeight;
   }
 
+  function appendPlanCard(title, steps) {
+    const card = document.createElement('div');
+    card.className = 'plan-card';
+
+    const completedCount = steps.filter(s => s.done).length;
+    const progressPercent = Math.round((completedCount / (steps.length || 1)) * 100);
+
+    let stepsHtml = '';
+    steps.forEach((step, i) => {
+      const icon = step.done ? '✅' : (i === completedCount ? '⏳' : '⚪');
+      const stepClass = step.done ? 'completed' : (i === completedCount ? 'active' : '');
+      stepsHtml += `
+        <div class="plan-step-item ${stepClass}">
+          <span class="plan-step-icon">${icon}</span>
+          <span class="plan-step-text">${escapeHTML(step.text)}</span>
+        </div>
+      `;
+    });
+
+    card.innerHTML = `
+      <div class="plan-header">
+        <div class="plan-title">
+          <span>📋 ${escapeHTML(title)}</span>
+        </div>
+        <span class="plan-badge">${completedCount}/${steps.length} Steps (${progressPercent}%)</span>
+      </div>
+      <div class="plan-progress-bar">
+        <div class="plan-progress-fill" style="width: ${progressPercent}%;"></div>
+      </div>
+      <div class="plan-steps-list">${stepsHtml}</div>
+    `;
+
+    chatStream.appendChild(card);
+    chatStream.scrollTop = chatStream.scrollHeight;
+  }
+
+  function appendSubagentCard(roleName, promptText) {
+    const card = document.createElement('div');
+    card.className = 'subagent-card';
+    card.innerHTML = `
+      <div class="subagent-header">
+        <div class="subagent-role">
+          <span>🤖 Subagent Working: <strong>${escapeHTML(roleName)}</strong></span>
+        </div>
+        <span class="subagent-status">● Active Task</span>
+      </div>
+      <div class="subagent-body">${escapeHTML(stripAnsi(promptText))}</div>
+    `;
+    chatStream.appendChild(card);
+    chatStream.scrollTop = chatStream.scrollHeight;
+  }
+
   function appendToActiveAgentMessage(text) {
     if (!activeAgentBubble) {
       const msgDiv = document.createElement('div');
@@ -621,21 +693,6 @@ document.addEventListener('DOMContentLoaded', () => {
         ⚠️ <span>Grok Engine Notice</span>
       </div>
       <div class="tool-output">${escapeHTML(stripAnsi(errorText))}</div>
-    `;
-    chatStream.appendChild(card);
-    chatStream.scrollTop = chatStream.scrollHeight;
-  }
-
-  function appendSubagentCard(roleName, promptText) {
-    const card = document.createElement('div');
-    card.className = 'tool-card';
-    card.style.borderColor = 'rgba(139, 92, 246, 0.4)';
-    card.style.background = 'rgba(139, 92, 246, 0.08)';
-    card.innerHTML = `
-      <div class="tool-header" style="color: #a78bfa;">
-        🤖 <span>Subagent Spawned: ${escapeHTML(roleName)}</span>
-      </div>
-      <div class="tool-output">${escapeHTML(stripAnsi(promptText))}</div>
     `;
     chatStream.appendChild(card);
     chatStream.scrollTop = chatStream.scrollHeight;
@@ -718,7 +775,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return str.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, '');
   }
 
-  // Full GFM Markdown Parser (Tables, Headings, Codeblocks, Lists)
+  // Full GFM Markdown Parser
   function formatMarkdown(rawText) {
     if (!rawText) return '';
     const cleanText = stripAnsi(rawText);
@@ -758,7 +815,6 @@ document.addEventListener('DOMContentLoaded', () => {
           tableRows = [];
         }
         
-        // Skip separator line |---|---|
         if (line.includes('---')) {
           tableHeaderDone = true;
           return;
@@ -768,7 +824,6 @@ document.addEventListener('DOMContentLoaded', () => {
         tableRows.push({ isHeader: !tableHeaderDone, cells });
         return;
       } else if (inTable) {
-        // Close table
         html += renderHtmlTable(tableRows);
         inTable = false;
         tableRows = [];
