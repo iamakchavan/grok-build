@@ -5,19 +5,20 @@ contextBridge.exposeInMainWorld('grokAPI', {
   getCurrentWorkspace: () => ipcRenderer.invoke('workspace:get-current'),
   readWorkspaceTree: () => ipcRenderer.invoke('workspace:read-tree'),
   readWorkspaceFile: (filePath) => ipcRenderer.invoke('workspace:read-file', filePath),
-  sendPrompt: (data) => ipcRenderer.invoke('agent:send', data),
-  cancelTurn: () => ipcRenderer.invoke('agent:cancel'),
-  
-  onAgentStdout: (callback) => {
-    ipcRenderer.on('agent:stdout', (event, text) => callback(text));
+
+  // PTY Terminal Integration
+  initPty: (dimensions) => ipcRenderer.invoke('pty:init', dimensions),
+  writePty: (data) => ipcRenderer.invoke('pty:write', data),
+  resizePty: (dimensions) => ipcRenderer.invoke('pty:resize', dimensions),
+  sendCommand: (commandStr) => ipcRenderer.invoke('agent:send-command', commandStr),
+
+  onPtyData: (callback) => {
+    ipcRenderer.on('pty:data', (event, data) => callback(data));
   },
-  onAgentStderr: (callback) => {
-    ipcRenderer.on('agent:stderr', (event, text) => callback(text));
+  onPtyReady: (callback) => {
+    ipcRenderer.on('pty:ready', (event, info) => callback(info));
   },
-  onAgentStatus: (callback) => {
-    ipcRenderer.on('agent:status', (event, status) => callback(status));
-  },
-  onAgentAcpEvent: (callback) => {
-    ipcRenderer.on('agent:acp-event', (event, msg) => callback(msg));
+  onPtyExit: (callback) => {
+    ipcRenderer.on('pty:exit', (event, code) => callback(code));
   },
 });

@@ -1,28 +1,20 @@
 document.addEventListener('DOMContentLoaded', () => {
   const workspacePathEl = document.getElementById('workspace-path');
   const btnChangeWorkspace = document.getElementById('btn-change-workspace');
-  const chatStream = document.getElementById('chat-stream');
   const promptInput = document.getElementById('prompt-input');
   const btnSendPrompt = document.getElementById('btn-send-prompt');
-  const btnClearChat = document.getElementById('btn-clear-chat');
   const btnNewChat = document.getElementById('btn-new-chat');
-  const modelSelect = document.getElementById('model-select');
+  const btnRestartPty = document.getElementById('btn-restart-pty');
   const statusDot = document.getElementById('agent-status-dot');
   const statusText = document.getElementById('agent-status-text');
 
-  // Sidebar Tabs (Files vs Sessions)
+  // Sidebar Tabs (Files vs Quick Actions)
   const tabFiles = document.getElementById('tab-files');
-  const tabSessions = document.getElementById('tab-sessions');
+  const tabQuick = document.getElementById('tab-quick');
   const viewFiles = document.getElementById('view-files');
-  const viewSessions = document.getElementById('view-sessions');
+  const viewQuick = document.getElementById('view-quick');
   const fileTreeContainer = document.getElementById('file-tree');
   const btnRefreshFiles = document.getElementById('btn-refresh-files');
-
-  // Terminal Drawer
-  const btnToggleTerminal = document.getElementById('btn-toggle-terminal');
-  const btnCloseTerminal = document.getElementById('btn-close-terminal');
-  const terminalDrawer = document.getElementById('terminal-drawer');
-  const terminalOutput = document.getElementById('terminal-output');
 
   // File Preview Modal
   const fileModal = document.getElementById('file-modal');
@@ -31,33 +23,79 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnCloseModal = document.getElementById('btn-close-modal');
   const btnAttachFile = document.getElementById('btn-attach-file');
   let currentModalPath = '';
-  let activeAgentBubble = null;
 
   // Tab Switching
   tabFiles.addEventListener('click', () => {
     tabFiles.classList.add('active');
-    tabSessions.classList.remove('active');
+    tabQuick.classList.remove('active');
     viewFiles.classList.add('active');
-    viewSessions.classList.remove('active');
+    viewQuick.classList.remove('active');
   });
 
-  tabSessions.addEventListener('click', () => {
-    tabSessions.classList.add('active');
+  tabQuick.addEventListener('click', () => {
+    tabQuick.classList.add('active');
     tabFiles.classList.remove('active');
-    viewSessions.classList.add('active');
+    viewQuick.classList.add('active');
     viewFiles.classList.remove('active');
   });
 
-  // Terminal Drawer Toggle
-  btnToggleTerminal.addEventListener('click', () => {
-    terminalDrawer.classList.toggle('hidden');
-  });
-  btnCloseTerminal.addEventListener('click', () => {
-    terminalDrawer.classList.add('hidden');
+  // Initialize Xterm.js Terminal
+  const term = new Terminal({
+    fontFamily: '"JetBrains Mono", monospace',
+    fontSize: 14,
+    cursorBlink: true,
+    theme: {
+      background: '#0d0f17',
+      foreground: '#e2e8f0',
+      cursor: '#8b5cf6',
+      selectionBackground: '#2d314e',
+      black: '#1e2136',
+      red: '#ef4444',
+      green: '#10b981',
+      yellow: '#f59e0b',
+      blue: '#3b82f6',
+      magenta: '#8b5cf6',
+      cyan: '#06b6d4',
+      white: '#ffffff',
+    }
   });
 
-  // Load Active Workspace & File Tree
+  const fitAddon = new FitAddon.FitAddon();
+  term.loadAddon(fitAddon);
+
+  const xtermContainer = document.getElementById('xterm-view');
+  term.open(xtermContainer);
+  fitAddon.fit();
+
+  window.addEventListener('resize', () => {
+    fitAddon.fit();
+    if (window.grokAPI) {
+      window.grokAPI.resizePty({ cols: term.cols, rows: term.rows });
+    }
+  });
+
+  // Bi-directional PTY data streams
+  term.onData(data => {
+    if (window.grokAPI) {
+      window.grokAPI.writePty(data);
+    }
+  });
+
   if (window.grokAPI) {
+    window.grokAPI.onPtyData(data => {
+      term.write(data);
+    });
+
+    window.grokAPI.onPtyReady(({ binary, workspace }) => {
+      setAgentStatus('ready', 'Grok TUI Active');
+      workspacePathEl.textContent = workspace;
+      loadWorkspaceTree();
+    });
+
+    window.grokAPI.onPtyExit(code => {
+      term.write(`\r\n\x1b[33m[Grok Desktop] Process exited with code ${code}. Click Restart Agent to launch again.\x1b[0m\r\n`);
+    });
+
     window.grokAPI.getCurrentWorkspace().then(path => {
       if (path) {
         workspacePathEl.textContent = path;
@@ -65,37 +103,70 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    btnChangeWorkspace.addEventListener('click', async () => {
+    // Initialize PTY session
+    window.grokAPI.initPty({ cols: term.cols, rows: term.rows });
+  }
+
+  // Workspace Folder Picker
+  btnChangeWorkspace.addEventListener('click', async () => {
+    if (window.grokAPI) {
       const selected = await window.grokAPI.selectWorkspace();
       if (selected) {
         workspacePathEl.textContent = selected;
         loadWorkspaceTree();
-        logTerminal(`[Workspace] Changed directory to ${selected}`);
       }
-    });
+    }
+  });
 
-    btnRefreshFiles.addEventListener('click', loadWorkspaceTree);
+  btnRefreshFiles.addEventListener('click', loadWorkspaceTree);
+  btnRestartPty.addEventListener('click', () => {
+    if (window.grokAPI) {
+      term.clear();
+      window.grokAPI.initPty({ cols: term.cols, rows: term.rows });
+    }
+  });
+  btnNewChat.addEventListener('click', () => {
+    btnRestartPty.click();
+  });
 
-    // Listen to real grok.exe stdout/stderr
-    window.grokAPI.onAgentStdout((text) => {
-      logTerminal(`[grok.exe stdout] ${text.trim()}`);
-    });
-
-    window.grokAPI.onAgentStderr((text) => {
-      logTerminal(`[grok.exe stderr] ${text.trim()}`);
-    });
-
-    window.grokAPI.onAgentStatus(({ active, code }) => {
-      setAgentStatus('ready', 'Agent Ready');
-      logTerminal(`[Status] Process exited with code ${code}`);
-      activeAgentBubble = null;
-    });
-
-    window.grokAPI.onAgentAcpEvent((msg) => {
-      handleAcpEvent(msg);
-    });
+  // Prompt Send Bar
+  function sendPromptToTui() {
+    const text = promptInput.value.trim();
+    if (!text) return;
+    if (window.grokAPI) {
+      window.grokAPI.sendCommand(text);
+    }
+    promptInput.value = '';
+    promptInput.style.height = 'auto';
+    term.focus();
   }
 
+  btnSendPrompt.addEventListener('click', sendPromptToTui);
+
+  promptInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendPromptToTui();
+    }
+  });
+
+  promptInput.addEventListener('input', () => {
+    promptInput.style.height = 'auto';
+    promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
+  });
+
+  // Quick Action buttons
+  document.querySelectorAll('.quick-prompt-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cmd = btn.getAttribute('data-cmd');
+      if (window.grokAPI) {
+        window.grokAPI.sendCommand(cmd);
+        term.focus();
+      }
+    });
+  });
+
+  // File Tree Explorer
   async function loadWorkspaceTree() {
     fileTreeContainer.innerHTML = '<li class="file-tree-loading">Scanning files...</li>';
     if (!window.grokAPI) return;
@@ -164,168 +235,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   btnAttachFile.addEventListener('click', () => {
-    if (currentModalPath) {
-      promptInput.value += ` @[${currentModalPath}]`;
+    if (currentModalPath && window.grokAPI) {
+      window.grokAPI.writePty(` ${currentModalPath}`);
       fileModal.classList.add('hidden');
-      promptInput.focus();
+      term.focus();
     }
   });
-
-  // Quick prompt buttons
-  document.querySelectorAll('.quick-prompt-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const prompt = btn.getAttribute('data-prompt');
-      promptInput.value = prompt;
-      submitPrompt();
-    });
-  });
-
-  // Auto-grow input
-  promptInput.addEventListener('input', () => {
-    promptInput.style.height = 'auto';
-    promptInput.style.height = Math.min(promptInput.scrollHeight, 150) + 'px';
-  });
-
-  // Enter to send
-  promptInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      submitPrompt();
-    }
-  });
-
-  btnSendPrompt.addEventListener('click', submitPrompt);
-
-  btnClearChat.addEventListener('click', () => {
-    chatStream.innerHTML = `
-      <div class="welcome-card">
-        <div class="welcome-icon">⚡</div>
-        <h3>Grok Build Session Cleared</h3>
-        <p>Ready for your next coding task or prompt.</p>
-      </div>
-    `;
-    activeAgentBubble = null;
-  });
-
-  btnNewChat.addEventListener('click', () => {
-    btnClearChat.click();
-  });
-
-  function submitPrompt() {
-    const text = promptInput.value.trim();
-    if (!text) return;
-
-    const welcomeCard = chatStream.querySelector('.welcome-card');
-    if (welcomeCard) welcomeCard.remove();
-
-    appendUserMessage(text);
-    promptInput.value = '';
-    promptInput.style.height = 'auto';
-    activeAgentBubble = null;
-
-    setAgentStatus('thinking', 'Agent Thinking...');
-    logTerminal(`[Prompt] Sending to real grok.exe: "${text}"`);
-
-    if (window.grokAPI) {
-      window.grokAPI.sendPrompt({
-        prompt: text,
-        model: modelSelect.value,
-      }).then(res => {
-        if (res.binary) {
-          logTerminal(`[System Agent] Executing ${res.binary}`);
-        }
-      });
-    }
-  }
-
-  function handleAcpEvent(msg) {
-    if (!msg) return;
-
-    // Handle real x.AI API Error / Usage Limit
-    if (msg.type === 'error' || msg.message) {
-      const errMsg = msg.message || JSON.stringify(msg);
-      appendErrorMessage(errMsg);
-      setAgentStatus('ready', 'Agent Ready');
-      return;
-    }
-
-    // Handle Tool Execution Event
-    if (msg.type === 'tool_call' || msg.tool) {
-      appendToolCard(msg.tool || 'system_tool', msg.output || msg.input || 'Executing tool...');
-      return;
-    }
-
-    // Handle Agent Message / Stream Text
-    let textChunk = "";
-    if (typeof msg === 'string') {
-      textChunk = msg;
-    } else if (msg.text) {
-      textChunk = msg.text;
-    } else if (msg.delta) {
-      textChunk = msg.delta;
-    } else if (msg.result && msg.result.text) {
-      textChunk = msg.result.text;
-    }
-
-    if (textChunk) {
-      appendToActiveAgentMessage(textChunk);
-    }
-  }
-
-  function appendUserMessage(text) {
-    const msgDiv = document.createElement('div');
-    msgDiv.className = 'chat-message user';
-    msgDiv.innerHTML = `<div class="message-body">${escapeHTML(text)}</div>`;
-    chatStream.appendChild(msgDiv);
-    chatStream.scrollTop = chatStream.scrollHeight;
-  }
-
-  function appendToActiveAgentMessage(text) {
-    if (!activeAgentBubble) {
-      const msgDiv = document.createElement('div');
-      msgDiv.className = 'chat-message agent';
-      msgDiv.innerHTML = `<div class="message-body"></div>`;
-      chatStream.appendChild(msgDiv);
-      activeAgentBubble = msgDiv.querySelector('.message-body');
-    }
-    activeAgentBubble.innerHTML += formatMarkdown(text);
-    chatStream.scrollTop = chatStream.scrollHeight;
-  }
-
-  function appendErrorMessage(errorText) {
-    const card = document.createElement('div');
-    card.className = 'tool-card error';
-    card.innerHTML = `
-      <div class="tool-header" style="color: #ef4444;">
-        ⚠️ <span>Grok Engine Status</span>
-      </div>
-      <div class="tool-output">${escapeHTML(errorText)}</div>
-    `;
-    chatStream.appendChild(card);
-    chatStream.scrollTop = chatStream.scrollHeight;
-  }
-
-  function appendToolCard(toolName, outputText) {
-    const card = document.createElement('div');
-    card.className = 'tool-card';
-    card.innerHTML = `
-      <div class="tool-header">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-        Tool Execution: <span>${escapeHTML(toolName)}</span>
-      </div>
-      <div class="tool-output">${escapeHTML(outputText)}</div>
-    `;
-    chatStream.appendChild(card);
-    chatStream.scrollTop = chatStream.scrollHeight;
-  }
-
-  function logTerminal(msg) {
-    const line = document.createElement('div');
-    line.className = 'terminal-line';
-    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    terminalOutput.appendChild(line);
-    terminalOutput.scrollTop = terminalOutput.scrollHeight;
-  }
 
   function setAgentStatus(state, label) {
     statusDot.className = `status-dot ${state}`;
@@ -334,12 +249,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function escapeHTML(str) {
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  }
-
-  function formatMarkdown(str) {
-    return escapeHTML(str)
-      .replace(/\n/g, '<br>')
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/`(.*?)`/g, '<code>$1</code>');
   }
 });
