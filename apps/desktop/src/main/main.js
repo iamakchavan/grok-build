@@ -198,7 +198,7 @@ ipcMain.handle('sessions:new', () => {
   return { status: 'cleared' };
 });
 
-// Real Sandboxed Grok Execution Handler (Resuming Session if activeSessionId set)
+// Real Sandboxed Grok Execution Handler
 ipcMain.handle('agent:send', async (event, { prompt, model, sessionId }) => {
   killActiveProcess();
 
@@ -213,7 +213,7 @@ ipcMain.handle('agent:send', async (event, { prompt, model, sessionId }) => {
     args.push('-r', resumeSession);
   }
 
-  args.push('-p', prompt, '--output-format', 'json', '--cwd', currentWorkspace, '--always-approve', '-m', targetModel);
+  args.push('-p', prompt, '--cwd', currentWorkspace, '--always-approve', '-m', targetModel);
 
   try {
     activeProcess = spawn(grokBin, args, {
@@ -229,6 +229,8 @@ ipcMain.handle('agent:send', async (event, { prompt, model, sessionId }) => {
 
       if (mainWindow) {
         mainWindow.webContents.send('agent:stdout', text);
+        // Forward live stream to renderer
+        mainWindow.webContents.send('agent:acp-event', text);
       }
     });
 
@@ -241,16 +243,15 @@ ipcMain.handle('agent:send', async (event, { prompt, model, sessionId }) => {
 
     activeProcess.on('exit', (code) => {
       console.log(`[Grok Desktop] Grok process exited with code ${code}`);
-      
-      let parsedEvent = null;
-      try {
-        parsedEvent = JSON.parse(buffer.trim());
-      } catch (e) {
-        parsedEvent = { type: 'text', text: buffer || 'Execution completed.' };
-      }
 
       if (mainWindow) {
-        mainWindow.webContents.send('agent:acp-event', parsedEvent);
+        // Parse final buffer for JSON errors or limit notices
+        try {
+          const parsed = JSON.parse(buffer.trim());
+          mainWindow.webContents.send('agent:acp-event', parsed);
+        } catch (e) {
+          // If plain text, buffer already forwarded
+        }
         mainWindow.webContents.send('agent:status', { active: false, code });
       }
 
